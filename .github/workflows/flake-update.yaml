@@ -1,0 +1,20 @@
+name: Automated Flake Input Updates
+on:
+  schedule:
+    - cron:  '30 2 * * *'
+  # Remove the below after testing
+  push:
+jobs:
+  run:
+    name: Automated Flake Input Updates
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+    - uses: actions/checkout@v3
+
+    - name: Update Flake
+    - uses: cachix/install-nix-action@v18
+    - run: nix flake update
+
+    - name: Commit changes
+    - uses: EndBug/add-and-commit@v9

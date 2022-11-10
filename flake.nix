@@ -1,7 +1,7 @@
 {
-  description = "nix-inputs";
+  description = "flake-inputs";
 
-    inputs = {
+  inputs = {
     stable.url = "github:nixos/nixpkgs/release-22.05";
     unstable.url = "github:nixos/nixpkgs/nixpkgs-unstable";
 
@@ -30,7 +30,8 @@
     pre-commit-hooks = {
       url = "github:cachix/pre-commit-hooks.nix";
       inputs = {
-        nixpkgs.follows = "stable";
+        # Unstable is required while we await clarification on https://github.com/cachix/pre-commit-hooks.nix/issues/185
+        nixpkgs.follows = "unstable";
         flake-utils.follows = "flake-utils";
       };
     };
@@ -56,9 +57,8 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs = { self }: let 
-    inherit (self.inputs) flake-utils;
-  in flake-utils.lib.eachSystem [
+  outputs = { self, flake-utils, ... }:
+    flake-utils.lib.eachSystem [
       "aarch64-linux"
       "aarch64-darwin"
       "x86_64-darwin"
@@ -76,22 +76,29 @@
         devShellStableDeps = with pkgs; [ nixfmt statix vulnix ];
         devShellUnstableDeps = with pkgsUnstable; [ nil ];
 
+        checks = {
+          pre-commit-check = self.inputs.pre-commit-hooks.lib.${system}.run
+            (import ./pre-commit-checks.nix { inherit self pkgs system; });
+        };
+
         devShell = pkgs.mkShell {
           name = "nix-config-dev-shell";
           packages = devShellStableDeps ++ devShellUnstableDeps;
           # Self reference to make the default shell hook that which generates
           # a suitable pre-commit hook installation
-          shellHook = "";
+          inherit (self.checks.${system}.pre-commit-check) shellHook;
         };
 
         # Self reference the dev shell for our system to resolve the lacking
         # devShells.${system}.default recommended structure
         devShells.default = self.outputs.devShell.${system};
       in {
-        inherit devShell devShells;
+        inherit devShell devShells checks;
         # Normally the // pattern is a little frowned upon as it does not act
         # the way most people expect - here it's fine as we've got two sets that have no 
         # collision space:
         # { devShell } + { nixosConfigurations: { ... }, darwinConfigurations: { ... }  }
-      });
+      }) // {
+        sources = self.inputs;
+      };
 }
